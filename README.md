@@ -1,475 +1,287 @@
-<div align="center">
+# 난임 환자 대상 임신 성공 여부 예측
 
-<img src="assets/cover.png" alt="Cover" width="600">
+LG Aimers 6기 온라인 해커톤(DACON)용 실험 코드를 정리한 저장소입니다. 원본 작업 파일인 `legacy/LG_original.py`에 있던 전처리, 파생변수, CatBoost 학습 흐름을 `src/`와 `scripts/`로 분리해 재사용 가능하게 정리했습니다.
 
-<br><br>
+현재 저장소 이름은 초기 생성 흔적 때문에 `traffic-accident-risk-prediction`으로 남아 있지만, 실제 내용은 난임 환자의 임신 성공 여부 예측 프로젝트입니다.
 
-# Traffic Accident Risk Prediction
+## 프로젝트 개요
 
-### Using Cognitive Characteristics of Commercial Drivers
+- 대회명: 난임 환자 대상 임신 성공 여부 예측 AI 온라인 해커톤
+- 운영: LG AI연구원 주최, DACON 주관
+- 과제: 난임 시술 환자 데이터를 바탕으로 임신 성공 여부를 이진 분류
+- 타깃 컬럼: `임신 성공 여부`
+- 리더보드 지표: `ROC-AUC`
+- 사용자 제공 대회 정보 기준 일정: 2025-02-01 시작, 2025-02-27 종료
 
-<br>
+이 저장소의 목적은 다음 세 가지입니다.
 
-[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![XGBoost](https://img.shields.io/badge/XGBoost-2.1.1-189FDD?style=for-the-badge&logo=xgboost&logoColor=white)](https://xgboost.readthedocs.io)
-[![CatBoost](https://img.shields.io/badge/CatBoost-FFCC00?style=for-the-badge&logo=catboost&logoColor=black)](https://catboost.ai)
-[![scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?style=for-the-badge&logo=scikitlearn&logoColor=white)](https://scikit-learn.org)
-[![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org)
-[![pandas](https://img.shields.io/badge/pandas-150458?style=for-the-badge&logo=pandas&logoColor=white)](https://pandas.pydata.org)
-[![NumPy](https://img.shields.io/badge/NumPy-013243?style=for-the-badge&logo=numpy&logoColor=white)](https://numpy.org)
-[![Optuna](https://img.shields.io/badge/Optuna-HPO-2496ED?style=for-the-badge)](https://optuna.org)
-[![SHAP](https://img.shields.io/badge/SHAP-Explainability-blueviolet?style=for-the-badge)](https://shap.readthedocs.io)
+1. LG 원본 코드의 전처리 로직을 재현할 수 있게 보존
+2. 파생변수와 드롭 컬럼을 모듈화해 반복 실험 가능하게 정리
+3. 교차검증, 피처 중요도, 제출 파일 생성까지 한 번에 실행
 
-<br>
+## 대회 규칙 요약
 
-> 운수종사자(버스/택시/화물 기사)의 **인지 반응 검사 데이터**로 **교통사고 위험도**를 예측하는 이진 분류 시스템  
-> **핵심 질문:** *"시험 점수를 아무리 개선해도 위험군에서 벗어날 수 없다면, 이 검사는 공정한가?"*
+- 외부 데이터 사용 금지
+- Python, R 사용 가능
+- 개인 또는 팀 단위 참여 가능
+- Public / Private 리더보드 모두 ROC-AUC 기반 평가
+- 오프라인 진출 검증용으로 코드와 PPT 제출 필요
 
-**Dacon AI Competition | 1,568명 참가 | 주최: 행정안전부 · NIA · 한국교통안전공단**
+이 저장소는 위 규칙 중 특히 `외부 데이터 금지`, `재현 가능한 코드 제출`을 염두에 두고 구성했습니다.
 
-</div>
-
----
-
-## 🏆 Competition Result
-
-<table>
-<tr>
-<td width="65%" align="center">
-
-<img src="assets/leaderboard.png" alt="Leaderboard" width="100%">
-
-</td>
-<td width="35%" align="center">
-
-<img src="assets/award_certificate.jpg" alt="Award Certificate" width="100%">
-
-<h3>🏅 Team Achievement</h3>
-<h4>(15th Place)</h4>
-<p>Out of 1,568 participants</p>
-
-</td>
-</tr>
-</table>
-
-<div align="center">
-
-| 🏅 Achievement | Details |
-|:--------------:|:--------|
-| **Final Rank** | 🏅 **15th / 1,568 teams** (Top 1.0%) |
-| **Final Score** | - |
-| **Prize** | - |
-| **Team** | Lucky Pelican (김진욱, 송용호, 이유진, 심재현) |
-| **Data Scale** | A: 647,241 + B: 297,526 (~1M records) |
-
-</div>
-
----
-
-## 📋 Problem Statement
-
-운전자격정밀검사(사업용 차량 운전자 대상) 데이터를 활용하여 **교통사고 위험군을 이진 분류**(0=정상, 1=위험)하는 문제입니다.
-
-검사는 두 유형으로 구분됩니다:
-
-| | Test A (인지 반응 검사) | Test B (운전적성 종합 검사) |
-|:-:|:--|:--|
-| **구조** | Trial 시퀀스 기반 (시행별 반응속도) | 인지기능 종합 평가 |
-| **하위검사** | A1~A9 (9개) | B1~B10 (10개) |
-| **측정 내용** | 단순반응, 선택반응, 주의력, 간섭(Stroop), 변화탐지 | 시야, 신호등, 화살표(Flanker), 길찾기, 표지판, 추적, 이중/삼중과제 |
-| **데이터 규모** | 647,241건 | 297,526건 |
-
-### Evaluation Metric
-
-$$\text{Score} = 0.5 \times (1 - \text{AUC}) + 0.25 \times \text{Brier} + 0.25 \times \text{ECE}$$
-
-> 낮을수록 좋은 점수. **판별력(AUC)**과 **확률 보정(Brier, ECE)**을 동시에 요구하는 지표
-
----
-
-## 💡 Key Insight: The Immutable Variable Dilemma
-
-> **"자동차 보험료는 나이와 사고 이력에 따라 결정된다. 이 두 변수가 사고를 설명하는 가장 강력한 예측 요인이다."**
-
-본 팀이 성능을 크게 향상시킨 **핵심 인사이트**는 데이터를 두 가지로 명확히 분리한 것입니다:
-
-<table>
-<tr>
-<td width="50%" align="center">
-
-### 🔄 Mutable Variables (가변)
-
-단기간에 **변화 가능**하거나<br>
-개인의 인지·주의력 상태를 반영
-
-`B1~B10 검사 결과`<br>
-`A1~A9 반응 시퀀스`
-
-</td>
-<td width="50%" align="center">
-
-### 🔒 Immutable Variables (불변)
-
-쉽게 **변하지 않는**<br>
-안정적인 인적 정보
-
-`Age (연령대)`<br>
-`Category (운수업종)`<br>
-`Past_Label (과거 사고 이력)`
-
-</td>
-</tr>
-</table>
-
-**Feature Importance 분석 결과:**
-
-<div align="center">
-<img src="assets/feature_importance.png" alt="Feature Importance" width="800">
-</div>
-
-> 불변 변수가 예측의 대부분을 지배합니다. 이는 **"시험 점수를 아무리 개선해도 위험군에서 벗어나기 어려운"** 구조적 문제를 의미합니다.
-
----
-
-## 🔬 Novelty: Mathematical Proof of Structural Limitation
-
-> *왜 시험 점수를 극단적으로 개선해도 위험 확률이 충분히 낮아지지 않는가?*
-
-### Sigmoid의 Lipschitz 상수에 의한 확률 변화량의 상한
-
-이진 분류 확률 모델에서 logit은 불변/가변 변수의 기여로 분해됩니다:
-
-$$p(z,w) = \sigma\big(A(z) + B(w)\big)$$
-
-> $z$: 불변 변수, $w$: 가변 변수, $A(z)$: 불변 logit 기여, $B(w)$: 가변 logit 기여
-
-Sigmoid 도함수의 **최대값이 0.25**라는 성질과 평균값 정리를 결합하면:
-
-$$|p(z, w_2) - p(z, w_1)| \leq 0.25 \cdot |B(w_2) - B(w_1)|$$
-
-OOF 데이터에서 그리드 서치를 통해 $\Delta B \approx 0.261$을 관측한 결과:
-
-$$|\Delta p|_{\max} \approx 0.065$$
-
-> **시험 점수를 극단적으로 개선해도 위험도 변화량은 약 6.5%를 넘을 수 없다.** 이는 log-loss 기반의 모든 확률 모델(GBDT, MLP 포함)에서 동일하게 발생하는 **구조적 현상**입니다.
-
-### 실증: 고위험군 재시험 시뮬레이션
-
-| | Before | After (가변 변수 최적화) | 변화 |
-|:-:|:------:|:-----:|:-----:|
-| **위험도** | 0.6758 | 0.6146 | -9.1% |
-| **목표 (저위험)** | - | 0.02 | **도달 불가** |
-
----
-
-## ⚖️ Proposed Solutions: Three Principles for Fairness
-
-본 모델이 실무에 적용되려면 **세 가지 원칙**이 충족되어야 합니다:
-
-1. **공정성** — 모든 시험자는 재시험 시 합격 가능성을 얻어야 한다
-2. **설명 가능성** — 불합격 사유를 납득 가능하게 설명할 수 있어야 한다
-3. **성능** — 위 두 조건을 만족하면서 높은 판별력을 유지해야 한다
-
-### Solution 1: 인적 판별자와의 결합
-
-```text
-모델 출력: 전체 위험도(불변 포함) + 시험 기반 개선 방향(가변 중심)
-    ↓
-최종 판단: 전문가가 시험 정보 중심으로 판단
-```
-
-### Solution 2: 불변변수를 우회하는 구조적 모델링
-
-```text
-전체 데이터 → 불변 변수로 그룹 분할 → 각 그룹 내 가변 변수만으로 학습
-    ↓
-그룹별 다른 threshold 설정 → 공정성 확보
-```
-
----
-
-## 🏗️ Technical Architecture
-
-### Dual-Model Design
-
-<div align="center">
-<img src="assets/architecture_diagram.png" alt="Architecture" width="800">
-</div>
-
-### 11 Models Compared → Best 2 Selected
-
-<div align="center">
-<img src="assets/model_comparison.png" alt="Model Comparison" width="800">
-</div>
-
-| Model | A AUC | B AUC | |
-|:------|:-----:|:-----:|:--|
-| SVM | ~0.55 | ~0.58 | |
-| KNN | ~0.57 | ~0.60 | |
-| Random Forest | ~0.68 | ~0.76 | |
-| **XGBoost** | **0.7213** | 0.7912 | ⭐ **Best for A** |
-| LightGBM | 0.7195 | 0.7920 | |
-| **CatBoost** | 0.7148 | **0.7943** | ⭐ **Best for B** |
-| TabNet | ~0.68 | ~0.75 | |
-| TabPFN | ~0.66 | ~0.72 | |
-| MLP | ~0.67 | ~0.74 | |
-
----
-
-## 🛠️ Feature Engineering Novelties
-
-### Novelty 1: Asymmetric Risk Weighting Function
-
-반응속도는 0(정확한 반응)에서 멀어질수록 위험이 증가하지만, 그 증가 속도는 **비대칭적**입니다:
-
-| 반응 유형 | 함수 | 근거 |
-|:---------:|:----:|------|
-| **지연 반응 (+)** | **Exponential** | 졸음·주의 저하·인지 부하 → 가장 치명적 |
-| **조기 반응 (-)** | **Logarithmic** | 위험하지만 지연만큼 급격하지 않음 |
-| **정확 반응 (0)** | Baseline | 가장 안전한 패턴 |
-
-### Novelty 2: Domain-Specific PCA (12 Independent PCAs)
-
-전체 피처를 단일 PCA로 압축하지 않고, **검사 도메인별로 독립적인 PCA**를 적용합니다. 각 검사가 독립적인 인지 기능을 측정하기 때문에, 다른 도메인의 분산이 혼합되면 의미 있는 주성분이 왜곡됩니다.
-
-<div align="center">
-<img src="assets/pca_diagram.png" alt="PCA Diagram" width="800">
-</div>
-
-### Novelty 3: Signal Detection Theory (SDT) for B9/B10
-
-이중/삼중 과제 검사에서 **신호탐지론 지표**로 운전자의 인지 특성을 정량화합니다:
-
-$$d' = \Phi^{-1}(\text{Hit Rate}) - \Phi^{-1}(\text{False Alarm Rate})$$
-
-| Metric | Description |
-|--------|-------------|
-| $d'$ (민감도) | 신호와 소음을 구별하는 능력 |
-| $c$ (기준) | 응답 편향 (보수적/진보적) |
-| Hit Rate | 신호 존재 시 정확 탐지율 |
-| FA Rate | 신호 부재 시 오탐율 |
-
-### Novelty 4: 1D CNN Sequence Pattern Extraction
-
-A 검사의 trial 시퀀스에서 단순 통계로는 파악하기 어려운 **행동 패턴**을 추출합니다:
-
-```text
-Trial Sequence → Conv1D(16) → Conv1D(32) → GlobalAvgPool → Dense(8) → 2D Embedding
-```
-
-> 2차원을 선택한 이유: 3차원 이상에서는 추론 시간이 30분을 초과하여 제출 불가
-
-### Novelty 5: Markov Label Transition Features
-
-동일 운전자의 과거 라벨 전이 패턴을 **Markov chain** 개념으로 특징화합니다:
-
-| Transition | Meaning | Interpretation |
-|:----------:|---------|----------------|
-| 0 → 0 | 지속 안전 | 안정적 안전 운전자 |
-| 0 → 1 | 위험 전환 | 악화 신호 |
-| 1 → 0 | 안전 전환 | 개선/회복 |
-| 1 → 1 | 지속 위험 | 고위험 반복군 |
-
-### Novelty 6: Cross-Test Information Sharing
-
-A 모델과 B 모델이 **독립적이지만 상호 정보를 교환**합니다:
-
-| Feature | Direction | Description |
-|---------|:---------:|-------------|
-| `b_previous_label` | B → A | B 검사의 과거 라벨 |
-| `primary_past_label` | A → A | 이전 A 검사 라벨 |
-| `past_A_history` | A → B | A 검사 이력 카테고리 |
-| `pk_dict` (16 features) | A → B | 시계열 이력 (성공률, 스트릭, 추세, 모멘텀 등) |
-
-### Novelty 7: Cross-Label History (Data Leakage Prevention)
-
-5-Fold CV 내에서 **학습 데이터를 절반씩 분할하여 교차 매핑**함으로써, 과거 이력 정보의 예측력을 활용하면서도 라벨 누수를 완전 차단합니다:
-
-<div align="center">
-<img src="assets/cross_label_diagram.png" alt="Cross Label History" width="800">
-</div>
-
----
-
-## 📊 Key Findings from Data Analysis
-
-### 학습 효과: 과거 검사 경험이 연령 효과를 상쇄
-
-| Past_Label | 60대 B2 Score | 70대 후반 B2 Score | 감소폭 |
-|:----------:|:------------:|:-----------------:|:-----:|
-| 기록없음 (-1) | 23.93 | 17.30 | **-27.7%** |
-| 과거사고 (1) | 23.13 | 22.00 | **-4.9%** |
-
-> 과거 검사 경험이 있는 운전자는 연령 증가에 따른 인지 점수 하락이 **약 5배 작음**
-
-### 업종별 역설: 높은 점수 ≠ 낮은 사고율
-
-| Category | B3 정확도 | 사고율 |
-|:--------:|:--------:|:-----:|
-| 택시 | 높음 (9.29) | **6.21%** |
-| 화물 | 낮음 (9.31과 유사) | **3.27%** |
-
-> 사고 위험도는 단순 시험 점수가 아닌, **운전 환경·운행 패턴·업무 특성**에 크게 좌우됨
-
-### 라벨 일관성: 안전 운전자는 계속 안전
-
-| 검사 간격 | 라벨 동일 비율 | 0→0 유지율 |
-|:---------:|:------------:|:---------:|
-| 0~3개월 | 94.5% | **99.9%** |
-| 12~18개월 | 87.5% | **97.7%** |
-| 24~36개월 | 82.9% | **94.8%** |
-
-> 한 번 안전(0)으로 분류된 운전자는 **97% 이상** 다음에도 안전을 유지
-
----
-
-## 🔍 Explainability: 4-Panel Visualization
-
-| Panel | Description |
-|:-----:|-------------|
-| **좌상** | 시험 결과가 예측에 기여한 정도 (Mutable Feature SHAP) |
-| **우상** | 위험도를 낮추기 위한 구체적 개선 목표값 (Current vs Target) |
-| **좌하** | 개선 시 위험도 감소 시뮬레이션 (예: -28.7% 감소 방향) |
-| **우하** | 전체 피처 영향력 종합 (All Features SHAP Top 20) |
-
-> 가변 변수 중심의 개선 방향을 제시하여, 수검자가 **어떤 부분을 보완해야 하는지** 명확히 이해할 수 있도록 함
-
----
-
-## 🧰 Tech Stack
-
-| Category | Tool | Version | Role |
-|:--------:|:-----|:-------:|:-----|
-| **GBDT** | XGBoost | 2.1.1 | Model A (5-Fold CV) |
-| **GBDT** | CatBoost | 1.2.3 | Model B (Native Categorical) |
-| **ML** | scikit-learn | 1.7.2 | PCA, StandardScaler, KFold, Metrics |
-| **DL** | PyTorch | 2.2.2 | 1D CNN AutoEncoder |
-| **HPO** | Optuna | 4.1.0 | 하이퍼파라미터 300회 탐색 |
-| **XAI** | SHAP | 0.46.0 | 피처 중요도 & 설명 가능성 |
-| **Data** | pandas | 2.3.3 | DataFrame 처리 |
-| **Numeric** | NumPy | 1.23.5 | 수치 연산, Vectorized SDT |
-| **Stats** | SciPy | - | norm.ppf (SDT d' 계산) |
-
----
-
-## 🚀 Quick Start
-
-```bash
-# 1) Setup
-pip install -r requirements.txt
-
-# 2) Put files in ./data
-# - train.csv
-# - test.csv
-# - sample_submission.csv
-
-# 3) Train Model B (CatBoost, K-Fold CV)
-python scripts/train_model_b.py --task-type CPU
-
-# 4) Optional: alias entrypoint
-python scripts/train_model_a.py --task-type CPU
-```
-
----
-
-## 📁 Project Structure
+## 저장소 구조
 
 ```text
 .
-├── assets/
-│   ├── cover.png
-│   ├── leaderboard.png
-│   ├── award_certificate.jpg
-│   ├── architecture_diagram.png
-│   ├── feature_importance.png
-│   ├── model_comparison.png
-│   ├── pca_diagram.png
-│   ├── cross_label_diagram.png
-│   └── technical_report/
 ├── data/
-│   ├── train.csv
-│   ├── test.csv
-│   └── sample_submission.csv
-├── models/
-│   └── model_b/
 ├── legacy/
 │   └── LG_original.py
+├── models/
 ├── scripts/
 │   ├── train_model_a.py
 │   └── train_model_b.py
 ├── src/
 │   └── traffic_accident_risk/
-│       ├── __init__.py
 │       ├── config.py
-│       ├── preprocessing.py
-│       └── evaluation.py
-├── requirements.txt
-├── .gitignore
+│       ├── evaluation.py
+│       └── preprocessing.py
 └── README.md
 ```
 
----
+## 데이터 명세
 
-## 📚 References
+원본 CSV는 저장소에 포함되어 있지 않습니다. 코드 기준으로 기대하는 입력 파일은 아래와 같습니다.
 
-1. T. Chen & C. Guestrin. *XGBoost: A Scalable Tree Boosting System.* KDD, 2016.
-2. A. V. Dorogush et al. *CatBoost: Gradient Boosting with Categorical Features Support.* NeurIPS, 2018.
-3. D. M. Green & J. A. Swets. *Signal Detection Theory and Psychophysics.* Wiley, 1966.
-4. T. Akiba et al. *Optuna: A Next-generation Hyperparameter Optimization Framework.* KDD, 2019.
-5. S. M. Lundberg & S. I. Lee. *A Unified Approach to Interpreting Model Predictions (SHAP).* NeurIPS, 2017.
-6. Dacon. 운수종사자 인지적 특성 데이터를 활용한 교통사고 위험 예측 AI 경진대회. https://dacon.io/competitions/official/236564
+- `data/train.csv`
+- `data/test.csv`
+- `data/sample_submission.csv`
 
----
+기본 식별자와 타깃은 다음과 같습니다.
 
-## 📄 Technical Report
+- ID 컬럼: `ID`
+- 타깃 컬럼: `임신 성공 여부` (`train.csv`에만 존재)
 
-<details>
-<summary><b>📖 Click to view Technical Report (6 pages)</b></summary>
+코드에서 다루는 주요 컬럼군은 아래와 같습니다.
 
-<br>
+| 구분 | 설명 | 예시 컬럼 |
+| --- | --- | --- |
+| 시술 기본 정보 | 시술 유형과 환자 상태 | `시술 유형`, `특정 시술 유형`, `시술 당시 나이`, `배아 생성 주요 이유` |
+| 시술 이력 | IVF/DI 누적 이력 | `총 시술 횟수`, `IVF 시술 횟수`, `DI 시술 횟수`, `IVF 임신 횟수`, `총 출산 횟수` |
+| 배아/난자 수량 | 생성, 저장, 해동, 이식 수량 | `총 생성 배아 수`, `이식된 배아 수`, `저장된 배아 수`, `해동된 배아 수`, `미세주입된 난자 수`, `혼합된 난자 수` |
+| 시간 정보 | 배양 및 이식 관련 경과일 | `배아 이식 경과일`, `난자 혼합 경과일`, `난자 해동 경과일` |
+| 유전 검사/시술 플래그 | 배아 이식 전략 및 검사 여부 | `단일 배아 이식 여부`, `착상 전 유전 검사 사용 여부`, `착상 전 유전 진단 사용 여부`, `PGS 시술 여부`, `PGD 시술 여부` |
+| 불임 원인 | 남성/여성/부부 요인과 정자 관련 항목 | `불임 원인 - 남성 요인`, `불임 원인 - 배란 장애`, `불임 원인 - 정자 운동성`, `남성 주 불임 원인`, `부부 부 불임 원인` |
 
-<div align="center">
+정확한 전체 스키마는 대회 데이터셋에 따르며, 실제 학습에서 사용되는 컬럼은 전처리 이후 `src/traffic_accident_risk/preprocessing.py`와 `src/traffic_accident_risk/config.py`에서 결정됩니다.
 
-### Page 1
-<img src="assets/technical_report/page_01.png" alt="Technical Report Page 1" width="100%">
+## 전처리 로직
 
----
+전처리는 `preprocess_dataframe()`에 모여 있습니다. 핵심 흐름은 아래와 같습니다.
 
-### Page 2
-<img src="assets/technical_report/page_02.png" alt="Technical Report Page 2" width="100%">
+### 1. 비정상 학습 행 제거
 
----
+학습 데이터에서 아래 조건을 만족하는 행은 제거합니다.
 
-### Page 3
-<img src="assets/technical_report/page_03.png" alt="Technical Report Page 3" width="100%">
+- `배아 생성 주요 이유`가 기증용/저장용 계열
+- `이식된 배아 수 == 0`
+- 그런데 `임신 성공 여부 == 1`
 
----
+원본 LG 코드 주석 기준으로, 도메인 상 해석이 어려운 사례를 학습 노이즈로 간주한 처리입니다.
 
-### Page 4
-<img src="assets/technical_report/page_04.png" alt="Technical Report Page 4" width="100%">
+### 2. 결측치 처리
 
----
+- `시술 유형 == DI`인 경우, IVF 성격이 강한 수치 컬럼의 결측치를 `0`으로 채움
+- 문자열 컬럼 결측치는 `"Unknown"`으로 치환
+- `PGD 시술 여부` 결측치는 `0`으로 치환
+- 특정 조건에서 `난자 혼합 경과일` 결측치를 `0`으로 보정
 
-### Page 5
-<img src="assets/technical_report/page_05.png" alt="Technical Report Page 5" width="100%">
+### 3. 횟수형 문자열 정규화
 
----
+`6회 이상` 같은 범주형 횟수 표현을 정수형으로 바꿉니다. 예를 들어 `IVF 시술 횟수`, `DI 임신 횟수` 같은 컬럼이 이에 해당합니다.
 
-### Page 6
-<img src="assets/technical_report/page_06.png" alt="Technical Report Page 6" width="100%">
+### 4. 전 컬럼 문자열화
 
-</div>
+최종적으로 타깃을 제외한 모든 입력 컬럼을 문자열로 변환해 CatBoost가 범주형 특성으로 처리하도록 맞춥니다.
 
-</details>
+## 파생변수 설계
 
----
+LG 원본 코드의 핵심은 파생변수입니다. 현재 파이프라인은 시술 이력, 배아 품질, 불임 원인, 배양 전략을 묶어 다수의 파생변수를 만듭니다.
 
-<div align="center">
+### 시술 이력 집계
 
-### 🏆 Made with dedication by Team Lucky Pelican 🏆
+- `총 시술 횟수`
+- `총 임신 횟수`
+- `총 출산 횟수`
+- `IVF 임신 대비 출산율`
+- `DI 임신 대비 출산율`
+- `IVF 사용 빈도`
+- `DI 사용 빈도`
+- `출산 성공률`
 
-**김진욱 · 송용호 · 이유진 · 심재현**
+### 배아/난자 효율 지표
 
-[![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jinnwoook)
+- `저장된 배아 수 대비 이식된 배아 비율`
+- `해동 배아 비율`
+- `배아 생성 대비 저장된 배아 비율`
+- `배아 생성 대비 해동된 배아 비율`
+- `버려진 배아 비율`
+- `자연 인공 혼합 생성 배아 수`
+- `저장된 자연 인공 혼합 배아 수`
+- `자연 인공 혼합 배아 이식 수`
+- `생성한 배아 이식 수`
+- `생성된 품질 좋은 배아 수`
 
-</div>
+### 불임 원인 집계
+
+- `불임 원인 총합`
+- `남성 불임 원인 총합`
+- `여성 불임 원인 총합`
+- `부부 불임 원인 총합`
+- `정자 문제 종합`
+- `불임원인-정자`
+
+### 도메인 규칙 기반 범주화
+
+- `환자의 현재 자궁 상태`
+- `저장된 배아 수(위험도)`
+- `혼합된 난자 수(위험도)`
+- `배아 품질 위험 지수(생성 배아 수 기준)`
+- `난자 채취 범주`
+- `배아 이식 대비 생성 비율 분류`
+
+### 배양 / 유전검사 관련 변수
+
+- `신선 배아 배양 일 수`
+- `동결 배아 배양 일 수`
+- `신선 배아 배양 유형`
+- `동결 배아 배양 유형`
+- `배아 배양 유형`
+- `PGS_검사진단`
+- `PGD_검사진단`
+- `현재 시술용 여부`
+- `is_5day_culture`
+- `is_pgs`
+- `is_pgd`
+- `is_under_35`
+- `combined_feature`
+
+## 드롭 컬럼
+
+모든 파생변수를 그대로 쓰지는 않습니다. `src/traffic_accident_risk/config.py`의 `DROP_COLUMNS`에서 일부 중복되거나 실험상 불리했던 컬럼을 제거합니다.
+
+대표 예시는 다음과 같습니다.
+
+- `특정 시술 유형`
+- `DI 임신 대비 출산율`
+- `출산 성공률`
+- `불임 원인 총합`
+- `PGD 시술 여부`
+- `PGS 시술 여부`
+- `난자 해동 경과일`
+- `난자 혼합 경과일`
+- `is_5day_culture`
+- `is_pgs`
+- `is_pgd`
+- `is_under_35`
+
+실제 제거 대상은 `config.py`를 기준으로 확인하는 것이 가장 정확합니다.
+
+## 모델 학습 방식
+
+현재 학습 파이프라인은 CatBoost 단일 모델 기반입니다.
+
+- 모델: `CatBoostClassifier`
+- 검증: `StratifiedKFold(n_splits=10, shuffle=True, random_state=42)`
+- 목적함수: `Logloss`
+- 평가 출력: Accuracy, Precision, Recall, F1, ROC-AUC
+- 테스트 예측: 10개 폴드 평균
+
+주요 하이퍼파라미터는 Optuna 탐색 결과를 옮겨둔 값입니다.
+
+| 파라미터 | 값 |
+| --- | --- |
+| `iterations` | `2000` |
+| `depth` | `7` |
+| `learning_rate` | `0.06239906179892577` |
+| `l2_leaf_reg` | `3.7383117174881337` |
+| `bagging_temperature` | `0.34855471754199147` |
+| `random_strength` | `0.012175171854050976` |
+| `class_weights` | `{0: 1.0, 1: 1.0113851477295377}` |
+
+`scripts/train_model_a.py`는 현재 `train_model_b.py`를 그대로 호출하는 alias entrypoint입니다.
+
+## 실행 방법
+
+### 1. 의존성 설치
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 2. 데이터 배치
+
+```text
+data/
+├── train.csv
+├── test.csv
+└── sample_submission.csv
+```
+
+### 3. 학습 실행
+
+GPU가 없으면 `CPU`로 실행하면 됩니다.
+
+```bash
+python scripts/train_model_b.py --task-type CPU
+```
+
+GPU 환경이라면:
+
+```bash
+python scripts/train_model_b.py --task-type GPU
+```
+
+## 산출물
+
+기본 출력 경로는 `models/model_b/`입니다.
+
+- `fold_models/catboost_fold_*.cbm`
+- `feature_importance.csv`
+- `feature_importance_top50.png`
+- `oof_predictions.csv`
+- `cv_metrics.json`
+- `submission.csv`
+
+## 원본 코드와 리팩터링 관계
+
+- `legacy/LG_original.py`
+  - 대회 당시 사용하던 전처리, 파생변수, 학습 코드가 한 파일에 들어 있음
+- `src/traffic_accident_risk/preprocessing.py`
+  - 전처리와 파생변수 생성을 함수화
+- `src/traffic_accident_risk/config.py`
+  - 드롭 컬럼과 CatBoost 설정을 분리
+- `src/traffic_accident_risk/evaluation.py`
+  - 평가지표와 피처 중요도 저장 로직 정리
+- `scripts/train_model_b.py`
+  - CLI 기반 학습 스크립트
+
+## 참고 가능한 성능 기록
+
+`legacy/LG_original.py` 하단 주석에는 10-fold 교차검증 결과가 아래처럼 남아 있습니다.
+
+- Accuracy: `0.7463 ± 0.0010`
+- Precision: `0.5371 ± 0.0081`
+- Recall: `0.1311 ± 0.0055`
+- F1 Score: `0.2107 ± 0.0072`
+- AUC: `0.7405 ± 0.0027`
+
+이 수치는 원본 스크립트 주석에 적힌 기록이며, 현재 저장소에는 원본 데이터가 포함되어 있지 않아 여기서 재검증되지는 않습니다.
+
+## 주의사항
+
+- 데이터 파일은 대회 규정과 개인정보 이슈 때문에 저장소에 포함하지 않았습니다.
+- 이 저장소는 외부 데이터 없이 제공 데이터만 사용하는 흐름을 전제로 합니다.
+- 파생변수 상당수가 도메인 가정에 의존하므로, 다른 난임 데이터셋에 그대로 적용하기 전에는 정의를 다시 검토해야 합니다.
+
