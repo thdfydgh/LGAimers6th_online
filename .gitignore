@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual env
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data / artifacts
+data/*
+!data/.gitkeep
+models/*
+!models/.gitkeep
+*.cbm
+*.pkl
+
+# OS
+.DS_Store
